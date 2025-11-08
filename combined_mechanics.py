@@ -4,8 +4,8 @@ import os
 import pygame
 try:
     pygame.mixer.init()
-    catch_sound = pygame.mixer.Sound("pop.wav")
-    miss_sound = pygame.mixer.Sound("error.wav")
+    catch_sound = pygame.mixer.Sound("audio/pop.wav")
+    miss_sound = pygame.mixer.Sound("audio/error.wav")
     SOUND_ENABLED = True
 except Exception as e:
     print("Audio disabled:", e)
@@ -43,10 +43,10 @@ STAGE2_GAP_MIN = 160
 STAGE2_GAP_MAX = 230
 
 # --- load banana sprite(s) ---
-banana_rgba = cv2.imread("banana.png", cv2.IMREAD_UNCHANGED)
+banana_rgba = cv2.imread("img/banana.png", cv2.IMREAD_UNCHANGED)
 use_sprite = banana_rgba is not None and banana_rgba.shape[2] == 4
 
-epic_rgba = cv2.imread("epicbanana.png", cv2.IMREAD_UNCHANGED)
+epic_rgba = cv2.imread("img/epicbanana.pngg", cv2.IMREAD_UNCHANGED)
 use_epic_sprite = epic_rgba is not None and epic_rgba.shape[2] == 4
 
 
