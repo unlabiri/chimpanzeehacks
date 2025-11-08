@@ -15,7 +15,7 @@ mp_holistic.POSE_CONNECTIONS
 mp_drawing.DrawingSpec(color=(0, 0, 255), thickness=2, circle_radius=2)
 
 # Start capturing video from the webcam
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 
 # Initialize the holistic model with minimum confidence thresholds
 with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5) as holistic:
