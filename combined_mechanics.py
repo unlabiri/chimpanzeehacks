@@ -1,4 +1,16 @@
 import os
+
+# --- sound setup (catch / miss) ---
+import pygame
+try:
+    pygame.mixer.init()
+    catch_sound = pygame.mixer.Sound("pop.wav")
+    miss_sound = pygame.mixer.Sound("error.wav")
+    SOUND_ENABLED = True
+except Exception as e:
+    print("Audio disabled:", e)
+    SOUND_ENABLED = False
+
 os.environ["GLOG_minloglevel"] = "2"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
@@ -260,18 +272,17 @@ with mp_holistic.Holistic(
             normal_since_epic = 0
             epic_next_at = random.randint(3, 5)
 
-        # --- update, draw and collide bananas ---
-        # 1) Update positions
+        # --- update positions ---
         for b in bananas:
             b.update(dt)
 
-        # 2) Draw and set per-banana radius
+        # --- draw bananas & update radius ---
         for b in bananas:
             b.draw_and_update_radius(image)
 
-        # 3) Collision checks and ground checks per banana
+        # --- collision + ground logic ---
         for b in bananas:
-            # Hand collision: any hand circle intersecting banana circle
+            # Hand collision
             caught = False
             for (hc_x, hc_y, hc_r) in hand_circles:
                 d = np.hypot(b.x - hc_x, b.y - hc_y)
@@ -280,10 +291,14 @@ with mp_holistic.Holistic(
                     break
 
             if caught:
-                # Score rules: epic banana can be worth more if you want
+                # play catch sfx
+                if SOUND_ENABLED and pygame.mixer.get_init():
+                    catch_sound.play()
+
+                # Score: epic worth 2 (you can change to 3 if you want)
                 collected += 2 if b.epic else 1
 
-                # Respawn this banana above the stack with stage-appropriate spacing
+                # Respawn above stack
                 if stage == 1:
                     b.respawn_above(bananas, STAGE1_GAP_MIN, STAGE1_GAP_MAX)
                 else:
@@ -302,13 +317,15 @@ with mp_holistic.Holistic(
                             normal_since_epic = 0
                             epic_next_at = random.randint(3, 5)
 
-                continue  # done with this banana this frame
+                continue  # done with this banana
 
-            # Miss check: hits the ground
-            
-            
+            # Miss (hits ground)
             if (b.y + b.radius) >= ground_y:
                 missed += 1
+
+                # play miss sfx
+                if SOUND_ENABLED and pygame.mixer.get_init():
+                    miss_sound.play()
 
                 if stage == 1:
                     b.respawn_above(bananas, STAGE1_GAP_MIN, STAGE1_GAP_MAX)
@@ -334,6 +351,7 @@ with mp_holistic.Holistic(
 
         cv2.imshow(WIN_NAME, image)
         key = cv2.waitKey(16) & 0xFF
+
         #if missed > 2:
         #   print("Game over — too many missed bananas!")
         #   break
