@@ -11,7 +11,7 @@ import random
 
 # --- settings ---
 CAM_INDEX = 0           # try 0, if no video try 1 or 2
-BANANA_SCALE = 0.8     # sprite size
+BANANA_SCALE = 0.08  # sprite size
 GRAVITY = 900.0         # pixels / s^2
 GROUND_OFFSET = 40      # pixels from bottom for "ground" line
 
