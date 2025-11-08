@@ -334,9 +334,9 @@ with mp_holistic.Holistic(
 
         cv2.imshow(WIN_NAME, image)
         key = cv2.waitKey(16) & 0xFF
-        if missed > 2:
-            print("Game over — too many missed bananas!")
-            break
+        #if missed > 2:
+        #   print("Game over — too many missed bananas!")
+        #   break
 
         if key == ord('q'):
             break
