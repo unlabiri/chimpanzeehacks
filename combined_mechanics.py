@@ -1,7 +1,11 @@
 import os
-
-# --- sound setup (catch / miss) ---
 import pygame
+import cv2
+import mediapipe as mp
+import numpy as np
+import time
+import random
+
 try:
     pygame.mixer.init()
     catch_sound = pygame.mixer.Sound("audio/pop.wav")
@@ -14,11 +18,7 @@ except Exception as e:
 os.environ["GLOG_minloglevel"] = "2"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
-import cv2
-import mediapipe as mp
-import numpy as np
-import time
-import random
+
 
 # --- camera + window settings ---
 CAM_INDEX = 0
@@ -178,43 +178,74 @@ def hand_circle_from_landmarks(hand_landmarks, width, height):
 
 # --- buttons ---
 def draw_start_button(image, cx, cy, r):
-    pastel_yellow = (180, 255, 255)
-    soft_outline = (160, 220, 220)
-
-    cv2.circle(image, (cx, cy), r, pastel_yellow, -1)
-    cv2.circle(image, (cx, cy), r, soft_outline, 8)
+    # --- colors (BGR) ---
+    baby_pink   = (193, 182, 255)  # light pink
+    soft_yellow = (186, 248, 255)  # pastel yellow
+    outline     = (160, 170, 220)  # soft gray-lavender edge
+    text_main   = (255, 255, 255)  # white
+    text_shadow = (140, 140, 160)  # subtle shadow
+    hint_color  = (225, 225, 230)  # hint text
 
     overlay = image.copy()
-    top_shine = (200, 255, 255)
+
+    # --- soft outer glow ---
+    cv2.circle(overlay, (cx, cy), int(r * 1.12), (200, 190, 250), -1)     # pinkish glow
+    cv2.addWeighted(overlay, 0.25, image, 0.75, 0, image)
+
+    # --- button base (baby pink) ---
+    overlay = image.copy()
+    cv2.circle(overlay, (cx, cy), r, baby_pink, -1)
+    cv2.addWeighted(overlay, 0.85, image, 0.15, 0, image)
+
+    # --- soft yellow inner ring ---
+    overlay = image.copy()
+    cv2.circle(overlay, (cx, cy), int(r * 0.86), soft_yellow, -1)
+    cv2.addWeighted(overlay, 0.65, image, 0.35, 0, image)
+
+    # --- crisp outline ---
+    cv2.circle(image, (cx, cy), r, outline, 3)
+
+    # --- glossy top highlight ---
+    overlay = image.copy()
+    gloss_color = (255, 255, 255)
     cv2.ellipse(
         overlay,
-        (cx, cy - int(r * 0.2)),
-        (int(r * 0.8), int(r * 0.5)),
+        (cx, cy - int(r * 0.22)),
+        (int(r * 0.85), int(r * 0.5)),
         0, 0, 360,
-        top_shine,
-        -1
+        gloss_color, -1
     )
-    cv2.addWeighted(overlay, 0.3, image, 0.7, 0)
+    cv2.addWeighted(overlay, 0.12, image, 0.88, 0, image)
 
-    cv2.putText(
-        image, "START",
-        (cx - 75, cy + 20),
-        cv2.FONT_HERSHEY_SIMPLEX, 1.6,
-        (120, 120, 120), 5, cv2.LINE_AA
-    )
-    cv2.putText(
-        image, "START",
-        (cx - 75, cy + 20),
-        cv2.FONT_HERSHEY_SIMPLEX, 1.6,
-        (255, 255, 255), 3, cv2.LINE_AA
-    )
-    cv2.putText(
-        image,
-        "Touch with hand or press S / Space",
-        (max(10, cx - 250), cy + r + 50),
-        cv2.FONT_HERSHEY_SIMPLEX, 0.6,
-        (230, 230, 230), 2, cv2.LINE_AA
-    )
+    # ---------- centered "START" text ----------
+    label = "START"
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 1.4
+    thick_outline = 5
+    thick_fill = 3
+
+    (tw, th), baseline = cv2.getTextSize(label, font, font_scale, thick_fill)
+    text_x = cx - tw // 2
+    # place baseline so text is vertically centered; tweak + th//3 for visual centering
+    text_y = cy + th // 3
+
+    # shadow / outline
+    cv2.putText(image, label, (text_x + 2, text_y + 2), font, font_scale, text_shadow, thick_outline, cv2.LINE_AA)
+    # main fill
+    cv2.putText(image, label, (text_x, text_y), font, font_scale, text_main, thick_fill, cv2.LINE_AA)
+
+    # ---------- centered hint text ----------
+    hint = "Touch with hand or press S / Space"
+    hint_scale = 0.62
+    hint_thick = 2
+    (hw, hh), hbase = cv2.getTextSize(hint, font, hint_scale, hint_thick)
+    hint_x = cx - hw // 2
+    hint_y = cy + r + 48  # below the button
+
+    # subtle shadow for hint
+    cv2.putText(image, hint, (hint_x + 1, hint_y + 1), font, hint_scale, (120, 120, 130), hint_thick, cv2.LINE_AA)
+    cv2.putText(image, hint, (hint_x, hint_y), font, hint_scale, hint_color, hint_thick, cv2.LINE_AA)
+
 
 
 def draw_replay_button(image, cx, cy, r):
@@ -286,6 +317,7 @@ with mp_holistic.Holistic(
 
     # --- game state ---
     GAME_STATE = "menu"  # "menu", "playing", "game_over"
+    
     start_btn = {"cx": W // 2, "cy": H // 2, "r": 110}
     replay_btn = {"cx": W // 2, "cy": H // 2 + 130, "r": 90}
 
