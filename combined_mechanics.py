@@ -343,24 +343,24 @@ with mp_holistic.Holistic(
         image = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
         # Landmarks (for fun / feedback)
-        if results.pose_landmarks:
-            mp_drawing.draw_landmarks(
-                image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS,
-                mp_drawing.DrawingSpec(color=(245, 117, 66), thickness=2, circle_radius=3),
-                mp_drawing.DrawingSpec(color=(245, 66, 230), thickness=2, circle_radius=2)
-            )
-        if results.left_hand_landmarks:
-            mp_drawing.draw_landmarks(
-                image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
-                mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=3),
-                mp_drawing.DrawingSpec(color=(121, 44, 250), thickness=2, circle_radius=2)
-            )
-        if results.right_hand_landmarks:
-            mp_drawing.draw_landmarks(
-                image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
-                mp_drawing.DrawingSpec(color=(80, 22, 10), thickness=2, circle_radius=3),
-                mp_drawing.DrawingSpec(color=(80, 44, 121), thickness=2, circle_radius=2)
-            )
+        # if results.pose_landmarks:
+        #     mp_drawing.draw_landmarks(
+        #         image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS,
+        #         mp_drawing.DrawingSpec(color=(245, 117, 66), thickness=2, circle_radius=3),
+        #         mp_drawing.DrawingSpec(color=(245, 66, 230), thickness=2, circle_radius=2)
+        #     )
+        # if results.left_hand_landmarks:
+        #     mp_drawing.draw_landmarks(
+        #         image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
+        #         mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=3),
+        #         mp_drawing.DrawingSpec(color=(121, 44, 250), thickness=2, circle_radius=2)
+        #     )
+        # if results.right_hand_landmarks:
+        #     mp_drawing.draw_landmarks(
+        #         image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS,
+        #         mp_drawing.DrawingSpec(color=(80, 22, 10), thickness=2, circle_radius=3),
+        #         mp_drawing.DrawingSpec(color=(80, 44, 121), thickness=2, circle_radius=2)
+        #     )
 
         # Hand hit-circles
         hand_circles = []
