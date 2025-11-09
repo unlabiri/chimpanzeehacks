@@ -52,6 +52,9 @@ use_epic_sprite = epic_rgba is not None and epic_rgba.shape[2] == 4
 horse_rgba = cv2.imread("img/horse.png", cv2.IMREAD_UNCHANGED)
 use_horse_sprite = horse_rgba is not None and horse_rgba.shape[2] == 4
 
+start_img = cv2.imread("img/Start.png", cv2.IMREAD_UNCHANGED)
+title_img = cv2.imread("img/Title.png", cv2.IMREAD_UNCHANGED)
+
 
 def overlay_rgba_centered(bg_bgr, fg_rgba, cx, cy, scale):
     """Draw RGBA centered on bg_bgr and return an approximate radius."""
@@ -373,7 +376,19 @@ with mp_holistic.Holistic(
 
         # ---------- MENU ----------
         if GAME_STATE == "menu":
-            draw_start_button(image, start_btn["cx"], start_btn["cy"], start_btn["r"])
+            # --- draw title above the button ---
+            if title_img is not None and title_img.shape[2] == 4:
+                overlay_rgba_centered(image, title_img, start_btn["cx"], start_btn["cy"] - 180, scale=1.0)
+            else:
+                cv2.putText(image, "MONKEYING AROUND", (start_btn["cx"] - 220, start_btn["cy"] - 180),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255), 3, cv2.LINE_AA)
+
+            # --- draw start button image ---
+            if start_img is not None and start_img.shape[2] == 4:
+                overlay_rgba_centered(image, start_img, start_btn["cx"], start_btn["cy"], scale=1.0)
+            else:
+                draw_start_button(image, start_btn["cx"], start_btn["cy"], start_btn["r"])
+
 
             for (hc_x, hc_y, hc_r) in hand_circles:
                 cv2.circle(image, (int(hc_x), int(hc_y)), int(hc_r), (0, 180, 255), 2)
