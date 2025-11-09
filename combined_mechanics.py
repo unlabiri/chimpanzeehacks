@@ -399,6 +399,7 @@ with mp_holistic.Holistic(
                 d = np.hypot(hc_x - start_btn["cx"], hc_y - start_btn["cy"])
                 if d <= (hc_r + start_btn["r"]):
                     hand_touched_start = True
+                    catch_sound.play()
                     break
 
             cv2.putText(
