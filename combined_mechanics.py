@@ -10,8 +10,6 @@ try:
 except Exception as e:
     print("Audio disabled:", e)
     SOUND_ENABLED = False
-    
-
 
 os.environ["GLOG_minloglevel"] = "2"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
@@ -29,7 +27,8 @@ GROUND_OFFSET = 70
 
 # --- stage / banana settings ---
 BANANA_SCALE = 0.08
-BANANAS_TO_STAGE2 = 10  # collected bananas to go to stage 2
+BANANAS_TO_STAGE2 = 10   # collected bananas to go to stage 2
+MISSED_LIMIT = 3         # misses before GAME OVER
 
 # Stage 1
 STAGE1_FAST_GRAVITY = 175.0
@@ -46,27 +45,37 @@ STAGE2_GAP_MAX = 230
 banana_rgba = cv2.imread("img/banana.png", cv2.IMREAD_UNCHANGED)
 use_sprite = banana_rgba is not None and banana_rgba.shape[2] == 4
 
-# NOTE: fixed filename (removed extra 'g')
 epic_rgba = cv2.imread("img/epicbanana.png", cv2.IMREAD_UNCHANGED)
 use_epic_sprite = epic_rgba is not None and epic_rgba.shape[2] == 4
 
+# --- load horse sprite for GAME OVER screen ---
+horse_rgba = cv2.imread("img/horse.png", cv2.IMREAD_UNCHANGED)
+use_horse_sprite = horse_rgba is not None and horse_rgba.shape[2] == 4
+
 
 def overlay_rgba_centered(bg_bgr, fg_rgba, cx, cy, scale):
-    """Draw RGBA centered and return an approximate radius for collisions."""
+    """Draw RGBA centered on bg_bgr and return an approximate radius."""
     h, w = bg_bgr.shape[:2]
     fh, fw = fg_rgba.shape[:2]
+
+    # scale
     nw = max(1, int(fw * scale))
     nh = max(1, int(fh * scale))
     fg = cv2.resize(fg_rgba, (nw, nh), interpolation=cv2.INTER_AREA)
 
+    # position
     x0, y0 = int(cx - nw // 2), int(cy - nh // 2)
     x1, y1 = x0 + nw, y0 + nh
+
+    # off screen
     if x1 <= 0 or y1 <= 0 or x0 >= w or y0 >= h:
         return int(0.25 * max(nw, nh))
 
+    # clamp to screen
     x0c, y0c = max(0, x0), max(0, y0)
     x1c, y1c = min(w, x1), min(h, y1)
 
+    # corresponding crop in fg
     fx0, fy0 = x0c - x0, y0c - y0
     fx1, fy1 = fx0 + (x1c - x0c), fy0 + (y1c - y0c)
 
@@ -76,8 +85,10 @@ def overlay_rgba_centered(bg_bgr, fg_rgba, cx, cy, scale):
 
     alpha = (fg_crop[:, :, 3].astype(np.float32) / 255.0)[:, :, None]
     fg_rgb = fg_crop[:, :, :3].astype(np.float32)
+
     roi = bg_bgr[y0c:y1c, x0c:x1c].astype(np.float32)
     blended = (alpha * fg_rgb + (1 - alpha) * roi).astype(np.uint8)
+
     bg_bgr[y0c:y1c, x0c:x1c] = blended
 
     return int(0.25 * max(nw, nh))
@@ -105,15 +116,24 @@ class Banana:
 
     def draw_and_update_radius(self, image):
         if self.epic and use_epic_sprite:
-            r = overlay_rgba_centered(image, epic_rgba, int(self.x), int(self.y), scale=BANANA_SCALE)
+            r = overlay_rgba_centered(image, epic_rgba,
+                                      int(self.x), int(self.y),
+                                      scale=BANANA_SCALE)
             self.radius = r if r is not None else 22
         elif use_sprite:
-            r = overlay_rgba_centered(image, banana_rgba, int(self.x), int(self.y), scale=BANANA_SCALE)
+            r = overlay_rgba_centered(image, banana_rgba,
+                                      int(self.x), int(self.y),
+                                      scale=BANANA_SCALE)
             self.radius = r if r is not None else 20
         else:
             self.radius = 22 if self.epic else 20
-            cv2.circle(image, (int(self.x), int(self.y)), int(self.radius),
-                       (0, 165, 255) if self.epic else (0, 255, 255), -1)
+            cv2.circle(
+                image,
+                (int(self.x), int(self.y)),
+                int(self.radius),
+                (0, 165, 255) if self.epic else (0, 255, 255),
+                -1
+            )
 
     def respawn_above(self, bananas, gap_min, gap_max):
         others = [b for b in bananas if b is not self]
@@ -156,39 +176,83 @@ def hand_circle_from_landmarks(hand_landmarks, width, height):
     return cx, cy, r
 
 
-# --- start menu button ---
+# --- buttons ---
 def draw_start_button(image, cx, cy, r):
-    """Draw a soft pastel yellow start button with subtle shading."""
-    # pastel base (warm, light yellow)
-    pastel_yellow = (180, 255, 255)   # soft buttery tone (BGR)
-    soft_outline  = (160, 220, 220)   # light outer rim
+    pastel_yellow = (180, 255, 255)
+    soft_outline = (160, 220, 220)
 
-    # main circle
     cv2.circle(image, (cx, cy), r, pastel_yellow, -1)
-
-    # soft outer border
     cv2.circle(image, (cx, cy), r, soft_outline, 8)
 
-    # inner subtle shine (lighter top section)
     overlay = image.copy()
     top_shine = (200, 255, 255)
-    cv2.ellipse(overlay, (cx, cy - int(r * 0.2)), (int(r * 0.8), int(r * 0.5)),
-                0, 0, 360, top_shine, -1)
-    cv2.addWeighted(overlay, 0.3, image, 0.7, 0, image)
+    cv2.ellipse(
+        overlay,
+        (cx, cy - int(r * 0.2)),
+        (int(r * 0.8), int(r * 0.5)),
+        0, 0, 360,
+        top_shine,
+        -1
+    )
+    cv2.addWeighted(overlay, 0.3, image, 0.7, 0)
 
-    # text shadow (gray)
-    cv2.putText(image, "START", (cx - 75, cy + 20),
-                cv2.FONT_HERSHEY_SIMPLEX, 1.6, (120, 120, 120), 5, cv2.LINE_AA)
+    cv2.putText(
+        image, "START",
+        (cx - 75, cy + 20),
+        cv2.FONT_HERSHEY_SIMPLEX, 1.6,
+        (120, 120, 120), 5, cv2.LINE_AA
+    )
+    cv2.putText(
+        image, "START",
+        (cx - 75, cy + 20),
+        cv2.FONT_HERSHEY_SIMPLEX, 1.6,
+        (255, 255, 255), 3, cv2.LINE_AA
+    )
+    cv2.putText(
+        image,
+        "Touch with hand or press S / Space",
+        (max(10, cx - 250), cy + r + 50),
+        cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+        (230, 230, 230), 2, cv2.LINE_AA
+    )
 
-    # foreground text (white)
-    cv2.putText(image, "START", (cx - 75, cy + 20),
-                cv2.FONT_HERSHEY_SIMPLEX, 1.6, (255, 255, 255), 3, cv2.LINE_AA)
 
-    # subtle instruction text
-    cv2.putText(image, "Touch with hand or press S / Space",
-                (max(10, cx - 250), cy + r + 50),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (230, 230, 230), 2, cv2.LINE_AA)
+def draw_replay_button(image, cx, cy, r):
+    """Same style as start, text REPLAY? centered."""
+    pastel_yellow = (180, 255, 255)
+    soft_outline = (160, 220, 220)
 
+    cv2.circle(image, (cx, cy), r, pastel_yellow, -1)
+    cv2.circle(image, (cx, cy), r, soft_outline, 8)
+
+    overlay = image.copy()
+    top_shine = (200, 255, 255)
+    cv2.ellipse(
+        overlay,
+        (cx, cy - int(r * 0.2)),
+        (int(r * 0.8), int(r * 0.5)),
+        0, 0, 360,
+        top_shine,
+        -1
+    )
+    cv2.addWeighted(overlay, 0.3, image, 0.7, 0)
+
+    text = "REPLAY?"
+    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 3)
+    tx = cx - tw // 2
+    ty = cy + th // 2
+    cv2.putText(
+        image, text,
+        (tx, ty),
+        cv2.FONT_HERSHEY_SIMPLEX, 1.2,
+        (120, 120, 120), 4, cv2.LINE_AA
+    )
+    cv2.putText(
+        image, text,
+        (tx, ty),
+        cv2.FONT_HERSHEY_SIMPLEX, 1.2,
+        (255, 255, 255), 2, cv2.LINE_AA
+    )
 
 
 # --- camera setup ---
@@ -221,11 +285,13 @@ with mp_holistic.Holistic(
     H, W = first_frame.shape[:2]
 
     # --- game state ---
-    GAME_STATE = "menu"  # "menu" or "playing"
+    GAME_STATE = "menu"  # "menu", "playing", "game_over"
     start_btn = {"cx": W // 2, "cy": H // 2, "r": 110}
+    replay_btn = {"cx": W // 2, "cy": H // 2 + 130, "r": 90}
 
     bananas, stage, collected, missed, normal_since_epic, epic_next_at = reset_game(W)
     last_t = time.time()
+    game_over_start = None  # for horse bounce timing
 
     while True:
         ok, frame = cap.read()
@@ -241,7 +307,7 @@ with mp_holistic.Holistic(
         results = holistic.process(rgb)
         image = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
-        # Draw landmarks (nice for both menu & game)
+        # Landmarks (for fun / feedback)
         if results.pose_landmarks:
             mp_drawing.draw_landmarks(
                 image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS,
@@ -261,27 +327,26 @@ with mp_holistic.Holistic(
                 mp_drawing.DrawingSpec(color=(80, 44, 121), thickness=2, circle_radius=2)
             )
 
-        # Build hand hit-circles (used in both states)
+        # Hand hit-circles
         hand_circles = []
         if results.left_hand_landmarks is not None:
             hand_circles.append(hand_circle_from_landmarks(results.left_hand_landmarks, W, H))
         if results.right_hand_landmarks is not None:
             hand_circles.append(hand_circle_from_landmarks(results.right_hand_landmarks, W, H))
 
-        # TIMING
+        # Timing
         now = time.time()
         dt = max(0.001, min(0.05, now - last_t))
         last_t = now
 
+        # ---------- MENU ----------
         if GAME_STATE == "menu":
-            # draw start button
             draw_start_button(image, start_btn["cx"], start_btn["cy"], start_btn["r"])
 
-            # visualize hand circles to help the user
             for (hc_x, hc_y, hc_r) in hand_circles:
                 cv2.circle(image, (int(hc_x), int(hc_y)), int(hc_r), (0, 180, 255), 2)
 
-            # collision with start button
+            # Hand touch start?
             hand_touched_start = False
             for (hc_x, hc_y, hc_r) in hand_circles:
                 d = np.hypot(hc_x - start_btn["cx"], hc_y - start_btn["cy"])
@@ -289,8 +354,12 @@ with mp_holistic.Holistic(
                     hand_touched_start = True
                     break
 
-            cv2.putText(image, "q = quit", (10, H - 12),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 1, cv2.LINE_AA)
+            cv2.putText(
+                image, "q = quit",
+                (10, H - 12),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                (180, 180, 180), 1, cv2.LINE_AA
+            )
 
             cv2.imshow(WIN_NAME, image)
             key = cv2.waitKey(16) & 0xFF
@@ -298,39 +367,130 @@ with mp_holistic.Holistic(
             if key == ord('q'):
                 break
             if key in (ord('s'), ord(' ')) or hand_touched_start:
-                # start gameplay
                 bananas, stage, collected, missed, normal_since_epic, epic_next_at = reset_game(W)
                 GAME_STATE = "playing"
-                
-                if SOUND_ENABLED and pygame.mixer.get_init():
-                  try:
-                    pygame.mixer.music.load("audio/game_song.wav")
-                    pygame.mixer.music.set_volume(0.4)
-                    pygame.mixer.music.play(-1)  # loop forever
-                  except Exception as e:
-                    print("Could not play background music:", e)
-            continue  # skip the rest; loop again
+                game_over_start = None
 
-        # ------------------ PLAYING STATE ------------------
-        # optional visuals in game
+                if SOUND_ENABLED and pygame.mixer.get_init():
+                    try:
+                        pygame.mixer.music.load("audio/game_song.wav")
+                        pygame.mixer.music.set_volume(0.4)
+                        pygame.mixer.music.play(-1)
+                    except Exception as e:
+                        print("Could not play background music:", e)
+            continue
+
+        # ---------- GAME OVER ----------
+        if GAME_STATE == "game_over":
+            # Darken background
+            overlay = image.copy()
+            cv2.rectangle(overlay, (0, 0), (W, H), (0, 0, 0), -1)
+            image = cv2.addWeighted(overlay, 0.55, image, 0.45, 0)
+
+            font = cv2.FONT_HERSHEY_SIMPLEX
+
+            # GAME OVER text centered
+            title = "GAME OVER!"
+            (tw, th), _ = cv2.getTextSize(title, font, 2.0, 4)
+            title_x = (W - tw) // 2
+            title_y = H // 2 - 160
+            cv2.putText(
+                image, title,
+                (title_x, title_y),
+                font, 2.0,
+                (0, 255, 255), 4, cv2.LINE_AA
+            )
+
+            # Quote positioned significantly left of center
+            quote = "For what the monkey considered business, the Horse considered play."
+            q_scale = 0.7
+            (qw, qh), _ = cv2.getTextSize(quote, font, q_scale, 2)
+            # place quote around 12% from left edge (instead of centered)
+            quote_x = int(max(10, W * 0.12))
+            quote_y = title_y + 80
+            cv2.putText(
+                image, quote,
+                (quote_x, quote_y),
+                font, q_scale,
+                (255, 255, 255), 2, cv2.LINE_AA
+            )
+
+            # REPLAY button centered under quote
+            draw_replay_button(image, replay_btn["cx"], replay_btn["cy"], replay_btn["r"])
+
+            # Hands visible for interaction
+            for (hc_x, hc_y, hc_r) in hand_circles:
+                cv2.circle(image, (int(hc_x), int(hc_y)), int(hc_r), (0, 180, 255), 2)
+
+            # Hand-touch on replay?
+            hand_replay = False
+            for (hc_x, hc_y, hc_r) in hand_circles:
+                d = np.hypot(hc_x - replay_btn["cx"], hc_y - replay_btn["cy"])
+                if d <= (hc_r + replay_btn["r"]):
+                    hand_replay = True
+                    break
+
+            # BOUNCING HORSE on the right side, drawn LAST (on top)
+            if use_horse_sprite and game_over_start is not None:
+                t = now - game_over_start
+                amplitude = 25       # pixels
+                period = 1.2         # seconds per bounce
+                offset = int(np.sin(2 * np.pi * t / period) * amplitude)
+
+                horse_x = int(W * 0.83)   # right side
+                horse_y = H // 2 + offset
+                overlay_rgba_centered(image, horse_rgba, horse_x, horse_y, scale=0.7)
+            elif not use_horse_sprite:
+                # simple fallback if sprite missing
+                cv2.circle(image, (int(W * 0.83), H // 2), 40, (50, 150, 255), -1)
+
+            cv2.putText(
+                image, "q = quit",
+                (10, H - 12),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                (200, 200, 200), 1, cv2.LINE_AA
+            )
+
+            cv2.imshow(WIN_NAME, image)
+            key = cv2.waitKey(16) & 0xFF
+
+            if key == ord('q'):
+                break
+            if key in (ord('s'), ord(' ')) or hand_replay:
+                bananas, stage, collected, missed, normal_since_epic, epic_next_at = reset_game(W)
+                GAME_STATE = "playing"
+                game_over_start = None
+                if SOUND_ENABLED and pygame.mixer.get_init():
+                    try:
+                        pygame.mixer.music.load("audio/game_song.wav")
+                        pygame.mixer.music.set_volume(0.4)
+                        pygame.mixer.music.play(-1)
+                    except Exception as e:
+                        print("Could not play background music:", e)
+            continue
+
+        # ---------- PLAYING ----------
+        # Hand visuals
         for (hc_x, hc_y, hc_r) in hand_circles:
             cv2.circle(image, (int(hc_x), int(hc_y)), int(hc_r), (0, 180, 255), 2)
+
+        # Ground line
         cv2.line(image, (0, int(ground_y)), (W, int(ground_y)), (60, 60, 60), 2)
 
-        # stage transition
+        # Stage transition
         if stage == 1 and collected >= BANANAS_TO_STAGE2:
             stage = 2
             bananas = make_stage2_bananas(W)
             normal_since_epic = 0
             epic_next_at = random.randint(3, 5)
 
-        # update & draw bananas
+        # Update and draw bananas
         for b in bananas:
             b.update(dt)
         for b in bananas:
             b.draw_and_update_radius(image)
 
-        # collisions & ground
+        # Collisions and misses
         for b in bananas:
             caught = False
             for (hc_x, hc_y, hc_r) in hand_circles:
@@ -380,27 +540,40 @@ with mp_holistic.Holistic(
                             normal_since_epic = 0
                             epic_next_at = random.randint(3, 5)
 
+        # Trigger GAME OVER
+        if missed >= MISSED_LIMIT:
+            GAME_STATE = "game_over"
+            game_over_start = now
+            if SOUND_ENABLED and pygame.mixer.get_init():
+                pygame.mixer.music.stop()
+            cv2.imshow(WIN_NAME, image)
+            cv2.waitKey(16)
+            continue
+
         # HUD
         info = f"Stage: {stage} | On screen: {len(bananas)} | Collected: {collected} | Missed: {missed}"
-        cv2.putText(image, info, (10, 25),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(image, "q = quit, space = reset", (10, H - 12),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 1, cv2.LINE_AA)
+        cv2.putText(
+            image, info,
+            (10, 25),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+            (0, 255, 255), 2, cv2.LINE_AA
+        )
+        cv2.putText(
+            image, "q = quit, space = reset",
+            (10, H - 12),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+            (180, 180, 180), 1, cv2.LINE_AA
+        )
 
         cv2.imshow(WIN_NAME, image)
         key = cv2.waitKey(16) & 0xFF
 
         if key == ord('q'):
             break
-        elif key == ord(' '):  # in-game reset
+        elif key == ord(' '):
             bananas, stage, collected, missed, normal_since_epic, epic_next_at = reset_game(W)
-            GAME_STATE = "menu"  # send them back to menu after reset if you prefer
-            # If you want to reset but STAY playing, comment the line above.
-
-        # Example: auto quit if too many misses
-        # if missed > 2:
-        #     print("Game over — too many missed bananas!")
-        #     break
+            GAME_STATE = "menu"
+            game_over_start = None
 
 cap.release()
 cv2.destroyAllWindows()
